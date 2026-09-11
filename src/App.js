@@ -5,6 +5,7 @@ import { ProjectModal } from './components/ProjectModal';
 import { TaskTable } from './components/TaskTable';
 import { TaskFilters } from './components/TaskFilters';
 import { ProjectInsights } from './components/ProjectInsights';
+import AIProjectAssistant from './components/AIProjectAssistant';
 import {
   calculateCriticalPath,
   effectiveStatus,
@@ -404,6 +405,15 @@ function App() {
               upcomingTasks={upcomingTasks}
               workload={workload}
               health={health}
+            />
+
+            <AIProjectAssistant
+              project={project}
+              tasks={tasks}
+              dependencies={dependencies}
+              users={users}
+              criticalPath={criticalPath}
+              projectProgress={projectProgress}
             />
 
             {riskyTasks.length > 0 && (
