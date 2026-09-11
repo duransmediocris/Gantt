@@ -11,8 +11,8 @@ async function request(url, options) {
   return data;
 }
 
-export const getProject = (projectId) =>
-  request(`${BASE_URL}/projects/${projectId}`);
+export const getProjects = () => request(`${BASE_URL}/projects`);
+export const getProject = (projectId) => request(`${BASE_URL}/projects/${projectId}`);
 
 export const createProject = (projectData) =>
   request(`${BASE_URL}/projects`, {
@@ -20,7 +20,6 @@ export const createProject = (projectData) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(projectData),
   });
-
 
 export const updateProject = (projectId, projectData) =>
   request(`${BASE_URL}/projects/${projectId}`, {
@@ -30,9 +29,19 @@ export const updateProject = (projectId, projectData) =>
   });
 
 export const deleteProject = (projectId) =>
-  request(`${BASE_URL}/projects/${projectId}`, {
-    method: 'DELETE',
+  request(`${BASE_URL}/projects/${projectId}`, { method: 'DELETE' });
+
+export const getUsers = () => request(`${BASE_URL}/users`);
+
+export const createUser = (name) =>
+  request(`${BASE_URL}/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
   });
+
+export const deleteUser = (userId) =>
+  request(`${BASE_URL}/users/${userId}`, { method: 'DELETE' });
 
 export const replaceTaskDependencies = (taskId, predecessorIds) =>
   request(`${BASE_URL}/tasks/${taskId}/dependencies`, {
@@ -56,9 +65,7 @@ export const updateTask = (taskId, taskData) =>
   });
 
 export const deleteTask = (taskId) =>
-  request(`${BASE_URL}/tasks/${taskId}`, {
-    method: 'DELETE',
-  });
+  request(`${BASE_URL}/tasks/${taskId}`, { method: 'DELETE' });
 
 export const linkTasks = (predecessorId, successorId) =>
   request(`${BASE_URL}/tasks/link`, {
@@ -69,6 +76,3 @@ export const linkTasks = (predecessorId, successorId) =>
       successor_id: Number(successorId),
     }),
   });
-
-export const getUsers = () =>
-  request(`${BASE_URL}/users`);

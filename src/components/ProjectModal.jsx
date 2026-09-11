@@ -1,11 +1,18 @@
 import React, { useEffect, useState } from 'react';
 
+const PROJECT_STATUSES = [
+  { value: 'planned', label: 'Планируется' },
+  { value: 'in_progress', label: 'В работе' },
+  { value: 'paused', label: 'На паузе' },
+  { value: 'done', label: 'Завершён' },
+];
+
 function dateValue(value) {
   return value ? String(value).slice(0, 10) : '';
 }
 
 export function ProjectModal({ isOpen, onClose, onSave, project = null }) {
-  const [form, setForm] = useState({ name: '', start_date: '', end_date: '' });
+  const [form, setForm] = useState({ name: '', start_date: '', end_date: '', status: 'planned' });
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -15,7 +22,8 @@ export function ProjectModal({ isOpen, onClose, onSave, project = null }) {
       name: project.name || '',
       start_date: dateValue(project.start_date),
       end_date: dateValue(project.end_date),
-    } : { name: '', start_date: '', end_date: '' });
+      status: project.status || 'planned',
+    } : { name: '', start_date: '', end_date: '', status: 'planned' });
     setError(null);
   }, [isOpen, project]);
 
@@ -49,6 +57,13 @@ export function ProjectModal({ isOpen, onClose, onSave, project = null }) {
           <label style={styles.label}>Название *
             <input style={styles.input} required value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
           </label>
+
+          <label style={styles.label}>Статус проекта
+            <select style={styles.input} value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
+              {PROJECT_STATUSES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            </select>
+          </label>
+
           <div style={styles.row}>
             <label style={styles.label}>Начало *
               <input style={styles.input} type="date" required value={form.start_date} onChange={(e) => setForm((p) => ({ ...p, start_date: e.target.value }))} />
@@ -57,6 +72,7 @@ export function ProjectModal({ isOpen, onClose, onSave, project = null }) {
               <input style={styles.input} type="date" required value={form.end_date} onChange={(e) => setForm((p) => ({ ...p, end_date: e.target.value }))} />
             </label>
           </div>
+
           <div style={styles.actions}>
             <button type="button" onClick={onClose} style={styles.secondaryButton}>Отмена</button>
             <button type="submit" disabled={saving} style={styles.primaryButton}>{saving ? 'Сохранение...' : project ? 'Сохранить' : 'Создать проект'}</button>

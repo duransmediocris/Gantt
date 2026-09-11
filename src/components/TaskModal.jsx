@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 const STATUSES = [
   { value: 'planned', label: 'К выполнению' },
   { value: 'in_progress', label: 'В работе' },
   { value: 'done', label: 'Выполнено' },
-  { value: 'overdue', label: 'Просрочено' },
 ];
 
 function dateValue(value) {
@@ -22,11 +21,12 @@ export function TaskModal({
   onDelete,
 }) {
   const [form, setForm] = useState({
-    name: '', start_date: '', end_date: '', assignee_id: '', status: 'planned', progress: 0, dependencies: [],
+    name: '', start_date: '', end_date: '', assignee_id: '', status: 'planned', progress: 0, dependencies: [], comments: '',
   });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
+  const [dependencyQuery, setDependencyQuery] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -37,14 +37,24 @@ export function TaskModal({
       assignee_id: task.assignee_id ?? '',
       status: task.status || 'planned',
       progress: Number(task.progress ?? 0),
+      comments: task.comments || '',
       dependencies: dependencies
         .filter((dep) => Number(dep.successor_id) === Number(task.id))
         .map((dep) => String(dep.predecessor_id)),
     } : {
-      name: '', start_date: '', end_date: '', assignee_id: '', status: 'planned', progress: 0, dependencies: [],
+      name: '', start_date: '', end_date: '', assignee_id: '', status: 'planned', progress: 0, dependencies: [], comments: '',
     });
+    setDependencyQuery('');
     setError(null);
   }, [isOpen, task, dependencies]);
+
+  const candidates = useMemo(() => {
+    const query = dependencyQuery.trim().toLowerCase();
+    return allTasks.filter((candidate) => {
+      if (task && String(candidate.id) === String(task.id)) return false;
+      return !query || String(candidate.name).toLowerCase().includes(query);
+    });
+  }, [allTasks, task, dependencyQuery]);
 
   if (!isOpen) return null;
 
@@ -52,6 +62,19 @@ export function TaskModal({
     setForm((prev) => {
       if (field === 'status' && value === 'done') return { ...prev, status: value, progress: 100 };
       return { ...prev, [field]: value };
+    });
+  };
+
+  const toggleDependency = (id) => {
+    setForm((prev) => {
+      const value = String(id);
+      const exists = prev.dependencies.includes(value);
+      return {
+        ...prev,
+        dependencies: exists
+          ? prev.dependencies.filter((item) => item !== value)
+          : [...prev.dependencies, value],
+      };
     });
   };
 
@@ -70,6 +93,7 @@ export function TaskModal({
         status: form.status,
         progress: form.status === 'done' ? 100 : Number(form.progress),
         dependencies: form.dependencies,
+        comments: form.comments.trim(),
       });
       onClose();
     } catch (err) {
@@ -93,8 +117,6 @@ export function TaskModal({
       setDeleting(false);
     }
   };
-
-  const candidates = allTasks.filter((candidate) => !task || String(candidate.id) !== String(task.id));
 
   return (
     <div style={styles.overlay} onClick={onClose}>
@@ -135,23 +157,43 @@ export function TaskModal({
 
           <label style={styles.label}>Прогресс: {form.progress}%
             <input
-              style={{ width: '100%', marginTop: 10, accentColor: '#2563eb' }}
+              style={styles.range}
               type="range" min="0" max="100" value={form.progress}
               disabled={form.status === 'done'}
               onChange={(e) => setField('progress', Number(e.target.value))}
             />
           </label>
 
-          <label style={styles.label}>Зависит от задач
-            <select
-              multiple
-              style={{ ...styles.input, minHeight: 112 }}
-              value={form.dependencies}
-              onChange={(e) => setField('dependencies', Array.from(e.target.selectedOptions, (option) => option.value))}
-            >
-              {candidates.map((candidate) => <option key={candidate.id} value={String(candidate.id)}>{candidate.name}</option>)}
-            </select>
+          <label style={styles.label}>Комментарий
+            <textarea
+              style={{ ...styles.input, minHeight: 84, resize: 'vertical' }}
+              value={form.comments}
+              onChange={(e) => setField('comments', e.target.value)}
+              placeholder="Контекст, договорённости, результат задачи..."
+            />
           </label>
+
+          <div style={styles.label}>Зависит от задач</div>
+          <div style={styles.dependencyBox}>
+            <input
+              style={styles.input}
+              value={dependencyQuery}
+              onChange={(e) => setDependencyQuery(e.target.value)}
+              placeholder="Найти задачу..."
+            />
+            <div style={styles.dependencyList}>
+              {candidates.length ? candidates.map((candidate) => {
+                const checked = form.dependencies.includes(String(candidate.id));
+                return (
+                  <label key={candidate.id} style={{ ...styles.dependencyItem, ...(checked ? styles.dependencyItemActive : {}) }}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleDependency(candidate.id)} />
+                    <span>{candidate.name}</span>
+                  </label>
+                );
+              }) : <div style={styles.emptyDeps}>Подходящих задач нет.</div>}
+            </div>
+          </div>
+          <div style={styles.depHint}>Можно выбрать несколько задач и снять любую зависимость одним кликом.</div>
 
           <div style={styles.actions}>
             <div>{task && <button type="button" onClick={handleDelete} disabled={deleting || saving} style={styles.deleteButton}>{deleting ? 'Удаление...' : 'Удалить'}</button>}</div>
@@ -167,14 +209,21 @@ export function TaskModal({
 }
 
 const styles = {
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.58)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18, zIndex: 1000 },
-  modal: { width: '100%', maxWidth: 620, maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: 20, padding: 24, boxShadow: '0 24px 80px rgba(15,23,42,.24)', border: '1px solid #e2e8f0' },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(15,23,42,.58)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18, zIndex: 1000 },
+  modal: { width: '100%', maxWidth: 680, maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: 20, padding: 24, boxShadow: '0 24px 80px rgba(15,23,42,.24)', border: '1px solid #e2e8f0' },
   titleRow: { display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 20 },
   closeButton: { border: 0, background: '#f1f5f9', width: 34, height: 34, borderRadius: 10, fontSize: 24, cursor: 'pointer', lineHeight: 1 },
   label: { display: 'block', marginBottom: 15, fontSize: 13, fontWeight: 700, flex: 1, color: '#334155' },
   input: { width: '100%', marginTop: 7, padding: '10px 11px', border: '1px solid #cbd5e1', borderRadius: 10, background: '#fff', outline: 'none' },
+  range: { width: '100%', marginTop: 10, accentColor: '#2563eb' },
   row: { display: 'flex', gap: 12, flexWrap: 'wrap' },
   error: { padding: 11, marginBottom: 14, borderRadius: 10, background: '#fff1f2', border: '1px solid #fecdd3', color: '#be123c' },
+  dependencyBox: { border: '1px solid #dbe3ee', borderRadius: 12, padding: 10, background: '#f8fafc' },
+  dependencyList: { display: 'grid', gap: 7, maxHeight: 190, overflowY: 'auto', marginTop: 8 },
+  dependencyItem: { display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px', border: '1px solid #e2e8f0', borderRadius: 9, background: '#fff', cursor: 'pointer', fontSize: 13 },
+  dependencyItemActive: { borderColor: '#93c5fd', background: '#eff6ff' },
+  emptyDeps: { color: '#64748b', fontSize: 13, padding: 8 },
+  depHint: { color: '#64748b', fontSize: 12, marginTop: 7, marginBottom: 14 },
   actions: { display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginTop: 20 },
   rightActions: { display: 'flex', gap: 8 },
   primaryButton: { padding: '10px 16px', border: 0, borderRadius: 10, background: '#2563eb', color: '#fff', fontWeight: 700, cursor: 'pointer', boxShadow: '0 5px 15px rgba(37,99,235,.2)' },
