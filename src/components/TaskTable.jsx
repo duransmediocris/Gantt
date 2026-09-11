@@ -101,12 +101,7 @@ export function TaskTable({
   return (
     <section style={styles.card}>
       <div style={styles.header}>
-        <div>
-          <h3 style={{ margin: 0 }}>Задачи проекта</h3>
-          <div style={styles.subtle}>
-            Нажми на заголовок столбца, чтобы отсортировать
-          </div>
-        </div>
+        <h3 style={{ margin: 0 }}>Задачи проекта</h3>
       </div>
 
       {tasks.length === 0 ? (

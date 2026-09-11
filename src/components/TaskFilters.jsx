@@ -16,12 +16,7 @@ export function TaskFilters({
   return (
     <section style={styles.card}>
       <div style={styles.topRow}>
-        <div>
-          <h3 style={{ margin: 0 }}>Поиск и фильтры</h3>
-          <div style={styles.subtle}>
-            Показано {visibleCount} из {totalCount} задач
-          </div>
-        </div>
+        <h3 style={{ margin: 0 }}>Поиск и фильтры</h3>
 
         <div style={styles.actions}>
           <button type="button" onClick={onReset} style={styles.secondaryButton}>

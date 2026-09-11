@@ -20,6 +20,8 @@ import {
   getProject,
   getUsers,
   linkTasks,
+  replaceTaskDependencies,
+  updateProject,
   updateTask,
 } from './api/tasksApi';
 
@@ -47,6 +49,7 @@ function App() {
 
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
 
   const [filters, setFilters] = useState({
@@ -249,8 +252,9 @@ function App() {
     const { dependencies: selectedDependencies, ...payload } = formData;
 
     if (editingTask) {
-      const data = await updateTask(editingTask.id, payload);
-      applyProjectData(data);
+      await updateTask(editingTask.id, payload);
+      await replaceTaskDependencies(editingTask.id, selectedDependencies || []);
+      await loadProject();
       return;
     }
 
@@ -288,6 +292,13 @@ function App() {
   };
 
   const handleSaveProject = async (formData) => {
+    if (editingProject && project) {
+      const data = await updateProject(project.id, formData);
+      applyProjectData(data);
+      setEditingProject(false);
+      return;
+    }
+
     const created = await createProject(formData);
     setProjectId(created.id);
   };
@@ -340,9 +351,6 @@ function App() {
         <header style={styles.header}>
           <div>
             <h1 style={{ margin: 0 }}>Проект под контролем</h1>
-            <div style={styles.subtle}>
-              Планирование задач и контроль сроков с диаграммой Ганта
-            </div>
           </div>
 
           <div style={styles.headerActions}>
@@ -360,7 +368,7 @@ function App() {
             <button type="button" onClick={() => loadProject()} style={styles.secondaryButton}>
               Обновить
             </button>
-            <button type="button" onClick={() => setProjectModalOpen(true)} style={styles.secondaryButton}>
+            <button type="button" onClick={() => { setEditingProject(false); setProjectModalOpen(true); }} style={styles.secondaryButton}>
               + Проект
             </button>
             <button type="button" onClick={openCreateTask} style={styles.primaryButton} disabled={!project}>
@@ -389,7 +397,12 @@ function App() {
                   {String(project.end_date).slice(0, 10)}
                 </div>
               </div>
-              <div style={styles.progressBadge}>Выполнено: {projectProgress}%</div>
+              <div style={styles.projectActions}>
+                <button type="button" style={styles.secondaryButton} onClick={() => { setEditingProject(true); setProjectModalOpen(true); }}>
+                  Изменить проект
+                </button>
+                <div style={styles.progressBadge}>Выполнено: {projectProgress}%</div>
+              </div>
             </section>
 
             <section style={styles.statsGrid}>
@@ -481,8 +494,9 @@ function App() {
 
       <ProjectModal
         isOpen={projectModalOpen}
-        onClose={() => setProjectModalOpen(false)}
+        onClose={() => { setProjectModalOpen(false); setEditingProject(false); }}
         onSave={handleSaveProject}
+        project={editingProject ? project : null}
       />
     </main>
   );
@@ -498,8 +512,8 @@ function StatCard({ number, label, danger = false }) {
 }
 
 const styles = {
-  page: { minHeight: '100vh', padding: 24 },
-  container: { maxWidth: 1500, margin: '0 auto' },
+  page: { minHeight: '100vh', padding: 28, background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)' },
+  container: { maxWidth: 1580, margin: '0 auto' },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -539,7 +553,7 @@ const styles = {
     borderRadius: 7,
     cursor: 'pointer',
   },
-  card: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16 },
+  card: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16 },
   errorCard: { borderColor: '#fecaca', background: '#fff7f7', color: '#991b1b' },
   projectCard: {
     display: 'flex',
@@ -548,11 +562,12 @@ const styles = {
     alignItems: 'center',
     background: '#fff',
     border: '1px solid #e5e7eb',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 14,
     flexWrap: 'wrap',
   },
+  projectActions: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   progressBadge: {
     background: '#eef2ff',
     color: '#3730a3',
@@ -567,7 +582,7 @@ const styles = {
     gap: 12,
     marginBottom: 16,
   },
-  statCard: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16 },
+  statCard: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16 },
   dangerStatCard: { background: '#fff7f7', borderColor: '#fecaca' },
   statNumber: { fontSize: 27, fontWeight: 800, marginBottom: 4 },
   statLabel: { color: '#6b7280', fontSize: 13 },
@@ -575,7 +590,7 @@ const styles = {
     background: '#fff7f7',
     border: '1px solid #fecaca',
     color: '#991b1b',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 16,
   },

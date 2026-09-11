@@ -5,11 +5,6 @@ export function toLocalDate(value) {
 }
 
 export function effectiveStatus(task) {
-  if (task.status === 'done') return 'done';
-  const end = toLocalDate(task.end_date);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (end && end < today) return 'overdue';
   return task.status || 'planned';
 }
 

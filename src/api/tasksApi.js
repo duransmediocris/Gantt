@@ -21,6 +21,21 @@ export const createProject = (projectData) =>
     body: JSON.stringify(projectData),
   });
 
+
+export const updateProject = (projectId, projectData) =>
+  request(`${BASE_URL}/projects/${projectId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(projectData),
+  });
+
+export const replaceTaskDependencies = (taskId, predecessorIds) =>
+  request(`${BASE_URL}/tasks/${taskId}/dependencies`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ predecessor_ids: predecessorIds.map(Number) }),
+  });
+
 export const createTask = (taskData) =>
   request(`${BASE_URL}/tasks`, {
     method: 'POST',

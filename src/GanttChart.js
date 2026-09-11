@@ -1,7 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { Gantt, ViewMode } from 'gantt-task-react';
 import 'gantt-task-react/dist/index.css';
-import { effectiveStatus, toLocalDate } from './utils/projectAnalytics';
+import { durationDays, effectiveStatus, toLocalDate } from './utils/projectAnalytics';
+
+function formatRuDate(date) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date);
+}
 
 function buildGanttTasks(tasks, dependencies, criticalTaskIds) {
   const dependenciesBySuccessor = new Map();
@@ -17,21 +25,21 @@ function buildGanttTasks(tasks, dependencies, criticalTaskIds) {
   return tasks.map((task) => {
     const status = effectiveStatus(task);
     const isCritical = critical.has(String(task.id));
-
     let taskStyles;
+
     if (status === 'overdue') {
       taskStyles = {
-        progressColor: '#dc2626',
-        progressSelectedColor: '#b91c1c',
-        backgroundColor: '#fecaca',
-        backgroundSelectedColor: '#fca5a5',
+        progressColor: '#ef4444',
+        progressSelectedColor: '#dc2626',
+        backgroundColor: '#fee2e2',
+        backgroundSelectedColor: '#fecaca',
       };
     } else if (isCritical) {
       taskStyles = {
-        progressColor: '#ea580c',
-        progressSelectedColor: '#c2410c',
-        backgroundColor: '#fed7aa',
-        backgroundSelectedColor: '#fdba74',
+        progressColor: '#f97316',
+        progressSelectedColor: '#ea580c',
+        backgroundColor: '#ffedd5',
+        backgroundSelectedColor: '#fed7aa',
       };
     }
 
@@ -45,8 +53,78 @@ function buildGanttTasks(tasks, dependencies, criticalTaskIds) {
       dependencies: dependenciesBySuccessor.get(String(task.id)) || [],
       isDisabled: false,
       styles: taskStyles,
+      duration: durationDays(task),
     };
   });
+}
+
+function RussianTooltip({ task, fontFamily }) {
+  return (
+    <div style={{ fontFamily, padding: '12px 14px', minWidth: 230 }}>
+      <div style={{ fontWeight: 800, marginBottom: 10 }}>{task.name}</div>
+      <div style={{ color: '#64748b', fontSize: 12, marginBottom: 5 }}>
+        {formatRuDate(task.start)} — {formatRuDate(task.end)}
+      </div>
+      <div style={{ fontSize: 12 }}>Длительность: {task.duration} дн.</div>
+      <div style={{ fontSize: 12, marginTop: 4 }}>Прогресс: {task.progress}%</div>
+    </div>
+  );
+}
+
+function RussianTaskListHeader({ headerHeight, rowWidth, fontFamily, fontSize }) {
+  const cell = {
+    display: 'flex',
+    alignItems: 'center',
+    height: headerHeight,
+    borderRight: '1px solid #e2e8f0',
+    padding: '0 10px',
+    fontWeight: 700,
+    color: '#475569',
+  };
+
+  return (
+    <div style={{ display: 'flex', fontFamily, fontSize, background: '#f8fafc' }}>
+      <div style={{ ...cell, width: rowWidth }}>Название</div>
+      <div style={{ ...cell, width: rowWidth }}>Начало</div>
+      <div style={{ ...cell, width: rowWidth, borderRight: 0 }}>Конец</div>
+    </div>
+  );
+}
+
+function RussianTaskListTable({ rowHeight, rowWidth, fontFamily, fontSize, tasks, selectedTaskId, setSelectedTask }) {
+  const cell = {
+    width: rowWidth,
+    minWidth: rowWidth,
+    height: rowHeight,
+    display: 'flex',
+    alignItems: 'center',
+    padding: '0 10px',
+    borderRight: '1px solid #e2e8f0',
+    borderBottom: '1px solid #f1f5f9',
+    overflow: 'hidden',
+    whiteSpace: 'nowrap',
+    textOverflow: 'ellipsis',
+  };
+
+  return (
+    <div style={{ fontFamily, fontSize }}>
+      {tasks.map((task) => (
+        <div
+          key={task.id}
+          onClick={() => setSelectedTask(task.id)}
+          style={{
+            display: 'flex',
+            cursor: 'pointer',
+            background: selectedTaskId === task.id ? '#eff6ff' : '#fff',
+          }}
+        >
+          <div style={{ ...cell, fontWeight: 600 }}>{task.name}</div>
+          <div style={cell}>{formatRuDate(task.start)}</div>
+          <div style={{ ...cell, borderRight: 0 }}>{formatRuDate(task.end)}</div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function GanttChart({
@@ -64,8 +142,13 @@ export default function GanttChart({
     [tasks, dependencies, criticalTaskIds]
   );
 
+  const ganttKey = useMemo(
+    () => ganttTasks.map((task) => `${task.id}:${task.start.getTime()}:${task.end.getTime()}`).join('|'),
+    [ganttTasks]
+  );
+
   if (ganttTasks.length === 0) {
-    return <div style={styles.empty}>По выбранным фильтрам задач нет.</div>;
+    return <div style={styles.empty}>Задач нет</div>;
   }
 
   const columnWidth = view === ViewMode.Month ? 180 : view === ViewMode.Week ? 110 : 60;
@@ -73,41 +156,46 @@ export default function GanttChart({
   return (
     <section style={styles.wrapper}>
       <div style={styles.toolbar}>
-        <div>
-          <strong>Диаграмма Ганта</strong>
-          <div style={styles.legend}>⚡ критический путь · красный — просрочено</div>
-        </div>
-
+        <strong style={styles.title}>Диаграмма Ганта</strong>
         <div style={styles.buttons}>
-          <button type="button" style={view === ViewMode.Day ? styles.activeButton : styles.button} onClick={() => setView(ViewMode.Day)}>
-            День
-          </button>
-          <button type="button" style={view === ViewMode.Week ? styles.activeButton : styles.button} onClick={() => setView(ViewMode.Week)}>
-            Неделя
-          </button>
-          <button type="button" style={view === ViewMode.Month ? styles.activeButton : styles.button} onClick={() => setView(ViewMode.Month)}>
-            Месяц
-          </button>
+          {[
+            [ViewMode.Day, 'День'],
+            [ViewMode.Week, 'Неделя'],
+            [ViewMode.Month, 'Месяц'],
+          ].map(([mode, label]) => (
+            <button
+              key={label}
+              type="button"
+              style={view === mode ? styles.activeButton : styles.button}
+              onClick={() => setView(mode)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
       <div style={styles.scroll}>
         <Gantt
+          key={`${view}-${ganttKey}`}
           tasks={ganttTasks}
           viewMode={view}
+          locale="ru"
           onDateChange={onTaskDateChange}
           onProgressChange={onTaskProgressChange}
           onDoubleClick={onTaskOpen}
           listCellWidth="210px"
           columnWidth={columnWidth}
-          barFill={60}
-          barCornerRadius={4}
+          barFill={64}
+          barCornerRadius={7}
           fontSize="13px"
+          fontFamily="Inter, system-ui, sans-serif"
+          TooltipContent={RussianTooltip}
+          TaskListHeader={RussianTaskListHeader}
+          TaskListTable={RussianTaskListTable}
+          arrowColor="#64748b"
+          todayColor="rgba(37, 99, 235, 0.08)"
         />
-      </div>
-
-      <div style={styles.hint}>
-        Перетаскивай задачи, чтобы менять сроки. Двойной клик открывает редактирование.
       </div>
     </section>
   );
@@ -116,51 +204,48 @@ export default function GanttChart({
 const styles = {
   wrapper: {
     background: '#fff',
-    border: '1px solid #e5e7eb',
-    borderRadius: 12,
+    border: '1px solid #e2e8f0',
+    borderRadius: 18,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 18,
+    boxShadow: '0 8px 30px rgba(15, 23, 42, 0.05)',
   },
   toolbar: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    padding: 14,
-    borderBottom: '1px solid #e5e7eb',
+    padding: '16px 18px',
+    borderBottom: '1px solid #e2e8f0',
     flexWrap: 'wrap',
   },
-  legend: { color: '#6b7280', fontSize: 11, marginTop: 4 },
+  title: { fontSize: 18 },
   buttons: { display: 'flex', gap: 8 },
   button: {
-    padding: '7px 12px',
-    border: '1px solid #d1d5db',
-    borderRadius: 7,
+    padding: '8px 14px',
+    border: '1px solid #cbd5e1',
+    borderRadius: 10,
     background: '#fff',
+    color: '#334155',
     cursor: 'pointer',
   },
   activeButton: {
-    padding: '7px 12px',
+    padding: '8px 14px',
     border: '1px solid #2563eb',
-    borderRadius: 7,
-    background: '#eff6ff',
-    color: '#1d4ed8',
+    borderRadius: 10,
+    background: '#2563eb',
+    color: '#fff',
     cursor: 'pointer',
+    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.22)',
   },
   scroll: { overflowX: 'auto' },
-  hint: {
-    padding: '10px 14px',
-    color: '#6b7280',
-    fontSize: 12,
-    borderTop: '1px solid #e5e7eb',
-  },
   empty: {
     background: '#fff',
-    border: '1px dashed #d1d5db',
-    borderRadius: 12,
+    border: '1px dashed #cbd5e1',
+    borderRadius: 18,
     padding: 28,
     textAlign: 'center',
-    color: '#6b7280',
-    marginBottom: 16,
+    color: '#64748b',
+    marginBottom: 18,
   },
 };
