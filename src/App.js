@@ -16,6 +16,7 @@ import {
 import {
   createProject,
   createTask,
+  deleteProject,
   deleteTask,
   getProject,
   getUsers,
@@ -155,7 +156,7 @@ function App() {
 
   const workload = useMemo(() => {
     const names = new Map(users.map((user) => [Number(user.id), user.name]));
-    const counts = new Map();
+    const counts = new Map(users.map((user) => [user.name, 0]));
 
     for (const task of tasks) {
       if (!task.assignee_id || effectiveStatus(task) === 'done') continue;
@@ -284,10 +285,28 @@ function App() {
       await deleteTask(taskId);
       await loadProject();
     } catch (err) {
-      throw new Error(
-        `Не удалось удалить задачу: ${err.message}. ` +
-          'Для удаления backend должен поддерживать DELETE /api/tasks/:id.'
-      );
+      throw new Error(`Не удалось удалить задачу: ${err.message}`);
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!project) return;
+
+    const confirmed = window.confirm(`Удалить проект «${project.name}» вместе со всеми его задачами?`);
+    if (!confirmed) return;
+
+    try {
+      await deleteProject(project.id);
+      setProject(null);
+      setTasks([]);
+      setDependencies([]);
+      setError(null);
+      setTaskModalOpen(false);
+      setProjectModalOpen(false);
+      setEditingTask(null);
+      setEditingProject(false);
+    } catch (err) {
+      alert(`Не удалось удалить проект: ${err.message}`);
     }
   };
 
@@ -383,7 +402,6 @@ function App() {
           <div style={{ ...styles.card, ...styles.errorCard }}>
             <strong>Не удалось загрузить проект #{projectId}</strong>
             <div style={{ marginTop: 6 }}>{error}</div>
-            <div style={{ marginTop: 10 }}>Укажи другой ID или создай новый проект.</div>
           </div>
         )}
 
@@ -400,6 +418,9 @@ function App() {
               <div style={styles.projectActions}>
                 <button type="button" style={styles.secondaryButton} onClick={() => { setEditingProject(true); setProjectModalOpen(true); }}>
                   Изменить проект
+                </button>
+                <button type="button" style={styles.dangerButton} onClick={handleDeleteProject}>
+                  Удалить проект
                 </button>
                 <div style={styles.progressBadge}>Выполнено: {projectProgress}%</div>
               </div>
@@ -552,6 +573,15 @@ const styles = {
     border: '1px solid #d1d5db',
     borderRadius: 7,
     cursor: 'pointer',
+  },
+  dangerButton: {
+    padding: '9px 14px',
+    background: '#fff',
+    color: '#b91c1c',
+    border: '1px solid #fecaca',
+    borderRadius: 7,
+    cursor: 'pointer',
+    fontWeight: 700,
   },
   card: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16 },
   errorCard: { borderColor: '#fecaca', background: '#fff7f7', color: '#991b1b' },

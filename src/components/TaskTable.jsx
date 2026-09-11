@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+
 import { durationDays, effectiveStatus, toLocalDate } from '../utils/projectAnalytics';
 
 const STATUS_LABELS = {
@@ -31,13 +32,19 @@ export function TaskTable({
 
   const predecessorsByTask = useMemo(() => {
     const map = new Map();
+
     for (const dep of dependencies) {
       const successorId = Number(dep.successor_id);
-      if (!map.has(successorId)) map.set(successorId, []);
+
+      if (!map.has(successorId)) {
+        map.set(successorId, []);
+      }
+
       map.get(successorId).push(
         taskNames.get(Number(dep.predecessor_id)) || `#${dep.predecessor_id}`
       );
     }
+
     return map;
   }, [dependencies, taskNames]);
 
@@ -72,6 +79,7 @@ export function TaskTable({
 
       av = toLocalDate(a[sort.field])?.getTime() || 0;
       bv = toLocalDate(b[sort.field])?.getTime() || 0;
+
       return (av - bv) * direction;
     });
 
@@ -81,7 +89,10 @@ export function TaskTable({
   const toggleSort = (field) => {
     setSort((prev) => ({
       field,
-      direction: prev.field === field && prev.direction === 'asc' ? 'desc' : 'asc',
+      direction:
+        prev.field === field && prev.direction === 'asc'
+          ? 'desc'
+          : 'asc',
     }));
   };
 
@@ -92,8 +103,13 @@ export function TaskTable({
 
   const sortableTh = (label, field) => (
     <th style={styles.th}>
-      <button type="button" style={styles.sortButton} onClick={() => toggleSort(field)}>
-        {label}{sortMark(field)}
+      <button
+        type="button"
+        style={styles.sortButton}
+        onClick={() => toggleSort(field)}
+      >
+        {label}
+        {sortMark(field)}
       </button>
     </th>
   );
@@ -101,7 +117,12 @@ export function TaskTable({
   return (
     <section style={styles.card}>
       <div style={styles.header}>
-        <h3 style={{ margin: 0 }}>Задачи проекта</h3>
+        <div>
+          <h3 style={{ margin: 0 }}>Задачи проекта</h3>
+          <div style={styles.subtle}>
+            Нажми на заголовок столбца, чтобы отсортировать
+          </div>
+        </div>
       </div>
 
       {tasks.length === 0 ? (
@@ -126,27 +147,46 @@ export function TaskTable({
             <tbody>
               {sortedTasks.map((task) => {
                 const status = effectiveStatus(task);
-                const depNames = predecessorsByTask.get(Number(task.id)) || [];
+                const depNames =
+                  predecessorsByTask.get(Number(task.id)) || [];
                 const isCritical = critical.has(String(task.id));
 
                 return (
-                  <tr key={task.id} style={isCritical ? styles.criticalRow : undefined}>
+                  <tr
+                    key={task.id}
+                    style={isCritical ? styles.criticalRow : undefined}
+                  >
                     <td style={styles.td}>
-                      <strong>{isCritical ? '⚡ ' : ''}{task.name}</strong>
+                      <strong>
+                        {isCritical ? '⚡ ' : ''}
+                        {task.name}
+                      </strong>
                     </td>
 
                     <td style={styles.td}>
                       {task.assignee_id
-                        ? userNames.get(Number(task.assignee_id)) || `ID ${task.assignee_id}`
+                        ? userNames.get(Number(task.assignee_id)) ||
+                          `ID ${task.assignee_id}`
                         : 'Не назначен'}
                     </td>
 
-                    <td style={styles.td}>{String(task.start_date).slice(0, 10)}</td>
-                    <td style={styles.td}>{String(task.end_date).slice(0, 10)}</td>
+                    <td style={styles.td}>
+                      {String(task.start_date).slice(0, 10)}
+                    </td>
+
+                    <td style={styles.td}>
+                      {String(task.end_date).slice(0, 10)}
+                    </td>
+
                     <td style={styles.td}>{durationDays(task)} дн.</td>
 
                     <td style={styles.td}>
-                      <span style={{ ...styles.status, ...styles[status] }}>
+                      <span
+                        style={{
+                          ...styles.status,
+                          ...styles[status],
+                        }}
+                      >
                         {STATUS_LABELS[status] || status}
                       </span>
                     </td>
@@ -157,18 +197,28 @@ export function TaskTable({
                           <div
                             style={{
                               ...styles.progressFill,
-                              width: `${Math.min(100, Math.max(0, Number(task.progress || 0)))}%`,
+                              width: `${Math.min(
+                                100,
+                                Math.max(0, Number(task.progress || 0))
+                              )}%`,
                             }}
                           />
                         </div>
+
                         <span>{Number(task.progress || 0)}%</span>
                       </div>
                     </td>
 
-                    <td style={styles.td}>{depNames.length ? depNames.join(', ') : '—'}</td>
+                    <td style={styles.td}>
+                      {depNames.length ? depNames.join(', ') : '—'}
+                    </td>
 
                     <td style={styles.td}>
-                      <button type="button" onClick={() => onTaskOpen(task)} style={styles.editButton}>
+                      <button
+                        type="button"
+                        onClick={() => onTaskOpen(task)}
+                        style={styles.editButton}
+                      >
                         Изменить
                       </button>
                     </td>
@@ -191,10 +241,28 @@ const styles = {
     overflow: 'hidden',
     marginTop: 16,
   },
-  header: { padding: 16, borderBottom: '1px solid #e5e7eb' },
-  subtle: { color: '#6b7280', fontSize: 12, marginTop: 4 },
-  scroll: { overflowX: 'auto' },
-  table: { width: '100%', minWidth: 1040, fontSize: 13 },
+
+  header: {
+    padding: 16,
+    borderBottom: '1px solid #e5e7eb',
+  },
+
+  subtle: {
+    color: '#6b7280',
+    fontSize: 12,
+    marginTop: 4,
+  },
+
+  scroll: {
+    overflowX: 'auto',
+  },
+
+  table: {
+    width: '100%',
+    minWidth: 1040,
+    fontSize: 13,
+  },
+
   th: {
     textAlign: 'left',
     padding: '10px 12px',
@@ -203,6 +271,7 @@ const styles = {
     borderBottom: '1px solid #e5e7eb',
     whiteSpace: 'nowrap',
   },
+
   sortButton: {
     padding: 0,
     border: 0,
@@ -211,12 +280,17 @@ const styles = {
     fontWeight: 700,
     cursor: 'pointer',
   },
+
   td: {
     padding: '11px 12px',
     borderBottom: '1px solid #f3f4f6',
     verticalAlign: 'middle',
   },
-  criticalRow: { background: '#fffaf0' },
+
+  criticalRow: {
+    background: '#fffaf0',
+  },
+
   status: {
     display: 'inline-block',
     padding: '4px 8px',
@@ -224,12 +298,39 @@ const styles = {
     fontSize: 12,
     whiteSpace: 'nowrap',
   },
-  planned: { background: '#f3f4f6', color: '#4b5563' },
-  todo: { background: '#f3f4f6', color: '#4b5563' },
-  in_progress: { background: '#eff6ff', color: '#1d4ed8' },
-  done: { background: '#ecfdf5', color: '#047857' },
-  overdue: { background: '#fff1f2', color: '#be123c' },
-  progressWrap: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 105 },
+
+  planned: {
+    background: '#f3f4f6',
+    color: '#4b5563',
+  },
+
+  todo: {
+    background: '#f3f4f6',
+    color: '#4b5563',
+  },
+
+  in_progress: {
+    background: '#eff6ff',
+    color: '#1d4ed8',
+  },
+
+  done: {
+    background: '#ecfdf5',
+    color: '#047857',
+  },
+
+  overdue: {
+    background: '#fff1f2',
+    color: '#be123c',
+  },
+
+  progressWrap: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 105,
+  },
+
   progressTrack: {
     width: 68,
     height: 6,
@@ -237,7 +338,13 @@ const styles = {
     borderRadius: 999,
     overflow: 'hidden',
   },
-  progressFill: { height: '100%', background: '#2563eb', borderRadius: 999 },
+
+  progressFill: {
+    height: '100%',
+    background: '#2563eb',
+    borderRadius: 999,
+  },
+
   editButton: {
     padding: '6px 10px',
     border: '1px solid #d1d5db',
@@ -245,5 +352,9 @@ const styles = {
     background: '#fff',
     cursor: 'pointer',
   },
-  empty: { padding: 22, color: '#6b7280' },
+
+  empty: {
+    padding: 22,
+    color: '#6b7280',
+  },
 };

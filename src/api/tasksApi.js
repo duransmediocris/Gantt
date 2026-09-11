@@ -29,6 +29,11 @@ export const updateProject = (projectId, projectData) =>
     body: JSON.stringify(projectData),
   });
 
+export const deleteProject = (projectId) =>
+  request(`${BASE_URL}/projects/${projectId}`, {
+    method: 'DELETE',
+  });
+
 export const replaceTaskDependencies = (taskId, predecessorIds) =>
   request(`${BASE_URL}/tasks/${taskId}/dependencies`, {
     method: 'PUT',

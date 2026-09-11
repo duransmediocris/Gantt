@@ -60,10 +60,7 @@ export default function AIProjectAssistant({
       setAnswer(result);
       setQuestion(finalQuestion);
     } catch (err) {
-      setError(
-        err.message ||
-        'AI пока не подключён к backend. Сам MVP продолжает работать.'
-      );
+      setError(err.message || 'Не удалось получить ответ AI.');
     } finally {
       setLoading(false);
     }
@@ -75,9 +72,6 @@ export default function AIProjectAssistant({
         <div>
           <div style={styles.eyebrow}>✨ AI-АССИСТЕНТ</div>
           <h2 style={styles.title}>Анализ проекта</h2>
-          <div style={styles.subtitle}>
-            Объясняет риски, приоритеты и влияние задач на сроки.
-          </div>
         </div>
 
         <button
@@ -136,9 +130,6 @@ export default function AIProjectAssistant({
             </div>
           )}
 
-          <div style={styles.note}>
-            AI получает только данные текущего проекта. API-ключ должен храниться только на backend.
-          </div>
         </div>
       )}
     </section>
@@ -169,7 +160,6 @@ const styles = {
     marginBottom: 6,
   },
   title: { margin: 0, fontSize: 22 },
-  subtitle: { marginTop: 6, color: '#6b7280', fontSize: 14 },
   primaryButton: {
     border: 0,
     borderRadius: 10,
@@ -243,10 +233,5 @@ const styles = {
     whiteSpace: 'pre-wrap',
     lineHeight: 1.55,
     color: '#111827',
-  },
-  note: {
-    marginTop: 12,
-    fontSize: 12,
-    color: '#94a3b8',
   },
 };
