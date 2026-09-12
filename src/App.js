@@ -6,6 +6,8 @@ import { TeamModal } from './components/TeamModal';
 import { TaskTable } from './components/TaskTable';
 import { TaskFilters } from './components/TaskFilters';
 import { ProjectInsights } from './components/ProjectInsights';
+import { MilestonesPanel } from './components/MilestonesPanel';
+import { HelpModal } from './components/HelpModal';
 import AIProjectAssistant from './components/AIProjectAssistant';
 import {
   calculateCriticalPath,
@@ -26,7 +28,6 @@ import {
   getProject,
   getProjects,
   getUsers,
-  linkTasks,
   replaceTaskDependencies,
   updateProject,
   updateTask,
@@ -51,6 +52,21 @@ function csvEscape(value) {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
+
+function milestoneStorageKey(projectId) {
+  return `deti-indigo:milestones:${projectId}`;
+}
+
+function loadMilestones(projectId) {
+  if (!projectId) return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(milestoneStorageKey(projectId)) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function App() {
   const [projectId, setProjectId] = useState('');
   const [projects, setProjects] = useState([]);
@@ -67,6 +83,8 @@ function App() {
   const [teamModalOpen, setTeamModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [milestones, setMilestones] = useState([]);
 
   const [filters, setFilters] = useState({ query: '', status: 'all', assignee: 'all', criticalOnly: false });
 
@@ -138,12 +156,24 @@ function App() {
     if (projectId) loadProject(projectId);
   }, [projectId, loadProject]);
 
+  useEffect(() => {
+    setMilestones(loadMilestones(projectId));
+  }, [projectId]);
+
+  const saveMilestones = useCallback((nextItems) => {
+    const normalized = Array.isArray(nextItems) ? nextItems : [];
+    setMilestones(normalized);
+    if (projectId) {
+      localStorage.setItem(milestoneStorageKey(projectId), JSON.stringify(normalized));
+    }
+  }, [projectId]);
+
   // Базовая совместная работа: изменения других пользователей подтягиваются автоматически.
   useEffect(() => {
-    if (!projectId) return undefined;
+    if (!projectId || taskModalOpen || projectModalOpen || teamModalOpen) return undefined;
     const timer = setInterval(() => loadProject(projectId, { silent: true }), 20000);
     return () => clearInterval(timer);
-  }, [projectId, loadProject]);
+  }, [projectId, loadProject, taskModalOpen, projectModalOpen, teamModalOpen]);
 
   const overdueTasks = useMemo(() => tasks.filter(isTaskOverdue), [tasks]);
 
@@ -174,14 +204,35 @@ function App() {
   const upcomingTasks = useMemo(() => getUpcomingTasks(tasks, 3), [tasks]);
 
   const workload = useMemo(() => {
-    const names = new Map(users.map((user) => [Number(user.id), user.name]));
-    const counts = new Map(users.map((user) => [user.name, 0]));
+    const stats = new Map(
+      users.map((user) => [
+        Number(user.id),
+        { id: Number(user.id), name: user.name, active: 0, done: 0, total: 0 },
+      ])
+    );
+
     for (const task of tasks) {
-      if (!task.assignee_id || effectiveStatus(task) === 'done') continue;
-      const name = names.get(Number(task.assignee_id)) || `ID ${task.assignee_id}`;
-      counts.set(name, (counts.get(name) || 0) + 1);
+      if (!task.assignee_id) continue;
+      const id = Number(task.assignee_id);
+      const current = stats.get(id) || {
+        id,
+        name: `ID ${task.assignee_id}`,
+        active: 0,
+        done: 0,
+        total: 0,
+      };
+
+      current.total += 1;
+      if (effectiveStatus(task) === 'done') current.done += 1;
+      else current.active += 1;
+      stats.set(id, current);
     }
-    return [...counts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+    // В аналитике показываем только тех, кто реально участвует в текущем проекте.
+    // Глобальный список пользователей пока остаётся на backend и будет переделан отдельно.
+    return [...stats.values()]
+      .filter((item) => item.total > 0)
+      .sort((a, b) => b.active - a.active || b.total - a.total || a.name.localeCompare(b.name));
   }, [tasks, users]);
 
   const health = useMemo(() => getProjectHealth({
@@ -226,7 +277,14 @@ function App() {
 
   const handleTaskProgressChange = async (ganttTask) => {
     try {
-      const data = await updateTask(ganttTask.id, { progress: Number(ganttTask.progress) });
+      const nextProgress = Number(ganttTask.progress);
+      const payload = { progress: nextProgress };
+
+      if (nextProgress >= 100) {
+        payload.status = 'done';
+      }
+
+      const data = await updateTask(ganttTask.id, payload);
       applyProjectData(data);
     } catch (err) {
       alert(`Не удалось изменить прогресс: ${err.message}`);
@@ -252,7 +310,9 @@ function App() {
     }
 
     const created = await createTask({ project_id: Number(projectId), ...payload });
-    for (const predecessorId of selectedDependencies || []) await linkTasks(predecessorId, created.id);
+    if ((selectedDependencies || []).length) {
+      await replaceTaskDependencies(created.id, selectedDependencies);
+    }
     await loadProject();
   };
 
@@ -344,6 +404,19 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
+  const printReport = () => {
+    if (!project) return;
+    const popup = window.open('', '_blank', 'width=900,height=700');
+    if (!popup) return alert('Разреши всплывающие окна, чтобы открыть отчёт.');
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const statusLabel = (t) => ({planned:'К выполнению',todo:'К выполнению',in_progress:'В работе',done:'Выполнено'}[effectiveStatus(t)] || effectiveStatus(t));
+    const rows = filteredTasks.map((t) => `<tr><td>${esc(t.name)}</td><td>${esc(statusLabel(t))}</td><td>${esc(String(t.end_date).slice(0,10))}</td><td>${Number(t.progress||0)}%</td></tr>`).join('');
+    const visibleOverdue = filteredTasks.filter(isTaskOverdue).length;
+    const milestoneRows = milestones.slice().sort((a, b) => String(a.date).localeCompare(String(b.date))).map((m) => `<li><strong>${esc(m.name)}</strong> — ${esc(m.date)}</li>`).join('');
+    popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Отчёт — ${esc(project.name)}</title><style>body{font-family:Arial,sans-serif;color:#0f172a;padding:36px}h1{margin-bottom:4px}.muted{color:#64748b}.cards{display:flex;gap:10px;margin:24px 0}.card{border:1px solid #ddd;border-radius:10px;padding:12px 16px}.n{font-size:24px;font-weight:800}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{text-align:left;border-bottom:1px solid #ddd;padding:9px}th{background:#f8fafc}.risk{margin:8px 0;padding:10px;background:#f8fafc;border-radius:8px}@media print{button{display:none}}</style></head><body><button onclick="window.print()">Сохранить / печать PDF</button><h1>${esc(project.name)}</h1><div class="muted">${esc(String(project.start_date).slice(0,10))} — ${esc(String(project.end_date).slice(0,10))}</div><div class="cards"><div class="card"><div class="n">${projectProgress}%</div>готовность</div><div class="card"><div class="n">${filteredTasks.length}</div>задач в выборке</div><div class="card"><div class="n">${visibleOverdue}</div>просрочено в выборке</div></div><h2>Критический путь</h2><p>${criticalPath.names.length ? criticalPath.names.map(esc).join(' → ') : 'Нет связанной цепочки'}</p><h2>Риски</h2>${riskItems.map(r=>`<div class="risk"><strong>${esc(r.title)}</strong><br>${esc(r.text)}</div>`).join('')}${milestoneRows ? `<h2>Контрольные точки</h2><ul>${milestoneRows}</ul>` : ''}<h2>Задачи</h2><table><thead><tr><th>Задача</th><th>Статус</th><th>Срок</th><th>Прогресс</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
+    popup.document.close();
+  };
+
   return (
     <main style={styles.page}>
       <div style={styles.container}>
@@ -362,6 +435,7 @@ function App() {
                 {projects.map((item) => <option key={item.id} value={String(item.id)}>{item.name}</option>)}
               </select>
             </label>
+            <button type="button" onClick={() => setHelpOpen(true)} style={styles.iconButton} title="Как это работает" aria-label="Как это работает">?</button>
             <button type="button" onClick={() => loadProject()} style={styles.secondaryButton} disabled={!projectId}>Обновить</button>
             <button type="button" onClick={() => setTeamModalOpen(true)} style={styles.secondaryButton}>Команда</button>
             <button type="button" onClick={() => { setEditingProject(false); setProjectModalOpen(true); }} style={styles.secondaryButton}>+ Проект</button>
@@ -394,9 +468,19 @@ function App() {
                 <div style={styles.subtle}>Срок проекта: {String(project.start_date).slice(0, 10)} → {String(project.end_date).slice(0, 10)}</div>
               </div>
               <div style={styles.projectActions}>
-                <button type="button" style={styles.secondaryButton} onClick={() => { setEditingProject(true); setProjectModalOpen(true); }}>Изменить проект</button>
-                <button type="button" style={styles.dangerButton} onClick={handleDeleteProject}>Удалить проект</button>
                 <div style={styles.progressBadge}>Выполнено: {projectProgress}%</div>
+                <button
+                  type="button"
+                  style={styles.iconButton}
+                  onClick={() => { setEditingProject(true); setProjectModalOpen(true); }}
+                  title="Настройки проекта"
+                  aria-label="Настройки проекта"
+                >
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4 20h4l10.5-10.5a2.12 2.12 0 0 0-3-3L5 17v3Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="m13.5 8.5 3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                </button>
               </div>
             </section>
 
@@ -417,13 +501,39 @@ function App() {
               riskItems={riskItems}
             />
 
-            <AIProjectAssistant project={project} tasks={tasks} dependencies={dependencies} users={users} criticalPath={criticalPath} projectProgress={projectProgress} />
+            <TaskFilters
+              filters={filters}
+              setFilters={setFilters}
+              users={users}
+              visibleCount={filteredTasks.length}
+              totalCount={tasks.length}
+              onReset={resetFilters}
+              onExport={exportCsv}
+              onPrintReport={printReport}
+            />
 
-            <TaskFilters filters={filters} setFilters={setFilters} users={users} visibleCount={filteredTasks.length} totalCount={tasks.length} onReset={resetFilters} onExport={exportCsv} />
+            <GanttChart
+              tasks={filteredTasks}
+              dependencies={filteredDependencies}
+              criticalTaskIds={criticalPath.ids}
+              milestones={milestones}
+              onTaskDateChange={handleTaskDateChange}
+              onTaskProgressChange={handleTaskProgressChange}
+              onTaskOpen={openEditTask}
+            />
 
-            <GanttChart tasks={filteredTasks} dependencies={filteredDependencies} criticalTaskIds={criticalPath.ids} onTaskDateChange={handleTaskDateChange} onTaskProgressChange={handleTaskProgressChange} onTaskOpen={openEditTask} />
+            <MilestonesPanel
+              projectId={projectId}
+              project={project}
+              items={milestones}
+              onChange={saveMilestones}
+            />
 
             <TaskTable tasks={filteredTasks} allTasks={tasks} users={users} dependencies={dependencies} criticalTaskIds={criticalPath.ids} onTaskOpen={openEditTask} />
+
+            <div style={styles.aiSection}>
+              <AIProjectAssistant project={project} tasks={tasks} dependencies={dependencies} users={users} criticalPath={criticalPath} projectProgress={projectProgress} />
+            </div>
           </>
         )}
       </div>
@@ -443,8 +553,11 @@ function App() {
         isOpen={projectModalOpen}
         onClose={() => { setProjectModalOpen(false); setEditingProject(false); }}
         onSave={handleSaveProject}
+        onDelete={editingProject ? handleDeleteProject : null}
         project={editingProject ? project : null}
       />
+
+      <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
 
       <TeamModal isOpen={teamModalOpen} onClose={() => setTeamModalOpen(false)} users={users} onCreateUser={handleCreateUser} onDeleteUser={handleDeleteUser} />
     </main>
@@ -486,7 +599,8 @@ const styles = {
   progressBadge: { padding: '9px 12px', borderRadius: 10, background: '#eef2ff', color: '#4338ca', fontWeight: 800, fontSize: 13 },
   primaryButton: { padding: '9px 14px', background: '#2563eb', color: '#fff', border: '1px solid #2563eb', borderRadius: 9, cursor: 'pointer', fontWeight: 750 },
   secondaryButton: { padding: '9px 14px', background: '#fff', color: '#334155', border: '1px solid #cbd5e1', borderRadius: 9, cursor: 'pointer', fontWeight: 650 },
-  dangerButton: { padding: '9px 14px', background: '#fff', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: 9, cursor: 'pointer', fontWeight: 700 },
+  iconButton: { width: 40, height: 40, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#fff', color: '#334155', border: '1px solid #cbd5e1', borderRadius: 10, cursor: 'pointer', transition: 'background .15s ease, border-color .15s ease' },
+  aiSection: { marginTop: 16 },
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(5, minmax(125px, 1fr))', gap: 10, marginBottom: 14 },
   statCard: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 16px', boxShadow: '0 6px 18px rgba(15,23,42,.03)' },
   statCardDanger: { background: '#fff7f7', borderColor: '#fecaca' },

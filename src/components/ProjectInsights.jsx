@@ -88,9 +88,11 @@ export function ProjectInsights({
         {workload.length ? (
           <div style={styles.list}>
             {workload.slice(0, 5).map((item) => (
-              <div key={item.name} style={styles.listRow}>
+              <div key={item.id} style={styles.listRow}>
                 <span>{item.name}</span>
-                <strong>{item.count} задач</strong>
+                <span style={styles.workloadValue}>
+                  <strong>{item.active}</strong> активн. · {item.done} выполн.
+                </span>
               </div>
             ))}
           </div>
@@ -133,6 +135,7 @@ const styles = {
   subtle: { color: '#64748b', fontSize: 12, lineHeight: 1.45 },
   list: { display: 'grid', gap: 7 },
   listRow: { display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12, borderBottom: '1px solid #f1f5f9', paddingBottom: 6 },
+  workloadValue: { color: '#475569', whiteSpace: 'nowrap' },
   riskList: { display: 'grid', gap: 8 },
   riskItem: { padding: '9px 10px', borderRadius: 9, border: '1px solid #e2e8f0', fontSize: 12 },
   risk_danger: { background: '#fff1f2', borderColor: '#fecdd3', color: '#9f1239' },
